@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{self, Path};
 use std::process::{Command, Stdio};
+use std::{time, thread};
 
 //TODO support a custom assets dir via a flag
 const TOS_DISK_PATH: &str = "./assets/templeOS-disk.qcow2";
@@ -17,7 +18,12 @@ fn main() {
         create_tos_disk(&tos_disk);
     }
 
-
+    let is_tos_installed = false; //TODO check this on runtime. maybe a assets/.tos_installed file?
+    if !is_tos_installed {
+        start_tos_installation(&tos_disk);
+    
+        thread::sleep(time::Duration::from_secs(20));
+    }
     println!("Hello, world!");
 }
 
@@ -44,17 +50,35 @@ fn create_tos_disk(path: &Path) {
     }
 }
 
-fn start_tos_installation() {
+fn start_tos(disk_path: &Path) -> std::process::Child {
+
+    todo!()
+}
+
+fn start_tos_installation(disk_path: &Path) -> std::process::Child {
     let tos_image_local = Path::new(TOS_IMAGE_LOCAL_PATH);
     let tos_image_local = path::absolute(tos_image_local).unwrap();
     if !tos_image_local.exists() {
         download_tos_image(&tos_image_local);
     }
+
+    let tos_image_local = tos_image_local.to_str().unwrap();
+    let disk_path = disk_path.to_str().unwrap();
+ 
+    let mut tos = Command::new("qemu-system-x86_64")
+                    .args(["-m","512"])
+                    .args(["-hda",disk_path])
+                    .args(["-cdrom",tos_image_local])
+                    .args(["-boot","d"])
+                    //.args(["-display", "sdl"])
+                    .spawn()
+                    .unwrap();
+    return tos
 }
 
 fn download_tos_image(path: &Path) {
     let path = path.to_str().unwrap();
-    println!("INFO: TempleOS ISO not found in \n{TOS_IMAGE_LOCAL_PATH}\n, attempting to download from {TOS_IMAGE_REMOTE_PATH}");
+    println!("INFO: TempleOS ISO not found in {TOS_IMAGE_LOCAL_PATH}, attempting to download from {TOS_IMAGE_REMOTE_PATH}");
     let res = Command::new("wget")
         .arg(TOS_IMAGE_REMOTE_PATH)
         .args(["-o", path])
@@ -63,6 +87,8 @@ fn download_tos_image(path: &Path) {
     if !res.success() {
         println!("ERROR: failed to download the TempleOS image");
         std::process::exit(1);
+    } else {
+        println!("INFO: successfully downloaded the TempleOS image")
     }
 }
 
