@@ -73,7 +73,9 @@ fn start_tos_installation(disk_path: &Path) -> std::process::Child {
                     //.args(["-display", "sdl"])
                     .spawn()
                     .unwrap();
-    return tos
+    todo!("installation flow not implemented")// I probably should focus on the runtime itself and see
+             // how to handle installation later
+    //return tos
 }
 
 fn download_tos_image(path: &Path) {
