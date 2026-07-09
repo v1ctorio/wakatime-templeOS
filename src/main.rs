@@ -2,6 +2,8 @@ use std::fs;
 use std::path::{self, Path};
 use std::process::{Command, Stdio};
 use std::{time, thread};
+use std::os::unix::net::UnixStream;
+use std::io::{Write, Read, BufRead, BufReader};
 
 //TODO support a custom assets dir via a flag
 const TOS_DISK_PATH: &str = "./assets/templeOS-disk.qcow2";
@@ -31,11 +33,37 @@ fn main() {
     let _ = fs::remove_file(&qmp_sock);
     let mut tos = start_tos(&tos_disk, &qmp_sock);
 
-    thread::sleep(time::Duration::from_secs(30));
+    thread::sleep(time::Duration::from_secs(10));
+
+    connect_qmp(&qmp_sock).unwrap();
 
     tos.wait().unwrap();
     println!("Hello, world!");
 }
+
+fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
+   let mut stream = UnixStream::connect(sockPath)?; 
+   println!("INFO: Connected with the QEMU stream");
+
+   let mut reader = BufReader::new(stream.try_clone()?);
+
+
+
+   let mut response = String::new();
+
+   stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
+   println!("INFO: Sent qmp_capabilities message");
+   let mut iterator = 0;
+   loop {
+       response.clear();
+       iterator += 1;
+       reader.read_line(&mut response);
+       println!("QMP #{iterator} <- {response}");
+
+       thread::sleep(time::Duration::from_secs(10));
+   }
+}
+
 fn create_tos_disk(path: &Path) {
     let disk_size = "2G";
 
