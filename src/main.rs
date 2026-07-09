@@ -7,10 +7,13 @@ use std::{time, thread};
 const TOS_DISK_PATH: &str = "./assets/templeOS-disk.qcow2";
 const TOS_IMAGE_LOCAL_PATH: &str = "./assets/TempleOS.ISO";
 const TOS_IMAGE_REMOTE_PATH: &str = "https://templeos.org/Downloads/TempleOS.ISO";
+const QMP_SOCKET_PATH: &str = "./assets/qmp_socket.sock"; 
 
 fn main() {
     let tos_disk = Path::new(TOS_DISK_PATH);
     let tos_disk = path::absolute(tos_disk).unwrap();
+    let qmp_sock = Path::new(QMP_SOCKET_PATH);
+    let qmp_sock = path::absolute(qmp_sock).unwrap();
 
     check_dependencies();
 
@@ -18,15 +21,21 @@ fn main() {
         create_tos_disk(&tos_disk);
     }
 
-    let is_tos_installed = false; //TODO check this on runtime. maybe a assets/.tos_installed file?
+    let is_tos_installed = true; //TODO check this on runtime. maybe a assets/.tos_installed file?
     if !is_tos_installed {
         start_tos_installation(&tos_disk);
     
         thread::sleep(time::Duration::from_secs(20));
     }
+    
+    let _ = fs::remove_file(&qmp_sock);
+    let mut tos = start_tos(&tos_disk, &qmp_sock);
+
+    thread::sleep(time::Duration::from_secs(30));
+
+    tos.wait().unwrap();
     println!("Hello, world!");
 }
-
 fn create_tos_disk(path: &Path) {
     let disk_size = "2G";
 
@@ -50,9 +59,20 @@ fn create_tos_disk(path: &Path) {
     }
 }
 
-fn start_tos(disk_path: &Path) -> std::process::Child {
+fn start_tos(disk_path: &Path, qmp_sock_path: &Path) -> std::process::Child {
+    let disk_path = disk_path.to_str().unwrap();
+    let qmp_sock_path = qmp_sock_path.to_str().unwrap();
 
-    todo!()
+    let tos = Command::new("qemu-system-x86_64")
+                    .args(["-m", "512"])
+                    .args(["-hda", disk_path])
+                    .arg("-qmp").arg(format!("unix:{},server=on,wait=off", qmp_sock_path))
+                    .spawn()
+                    .unwrap();
+
+    thread::sleep(time::Duration::from_secs(1));
+    println!("INFO: successfully started the TempleOS VM");
+    tos
 }
 
 fn start_tos_installation(disk_path: &Path) -> std::process::Child {
