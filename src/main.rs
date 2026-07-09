@@ -36,9 +36,10 @@ fn main() {
     thread::sleep(time::Duration::from_secs(10));
 
     connect_qmp(&qmp_sock).unwrap();
-
-    tos.wait().unwrap();
+    
+    tos.kill();
     println!("Hello, world!");
+    std::process::exit(0);
 }
 
 fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
@@ -52,15 +53,22 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    let mut response = String::new();
 
    stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
+   stream.write_all(b"\n");
+
    println!("INFO: Sent qmp_capabilities message");
    let mut iterator = 0;
    loop {
-       response.clear();
-       iterator += 1;
-       reader.read_line(&mut response);
-       println!("QMP #{iterator} <- {response}");
+        response.clear();
+        iterator += 1;
+        reader.read_line(&mut response);
+        println!("QMP #{iterator} <- {}", &response);
+        let cmd = jzon::parse(response.trim()).map_err(|_|std::io::ErrorKind::Other)?;
+       
+        if cmd["event"] == "POWERDOWN" {
+            println!("INFO: POWERDOWN event received. Shutting down");
+            return Ok(());
+        }
 
-       thread::sleep(time::Duration::from_secs(10));
    }
 }
 
