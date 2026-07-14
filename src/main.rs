@@ -49,9 +49,6 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    println!("INFO: Connected with the QEMU stream");
 
    let mut reader = BufReader::new(stream.try_clone()?);
-
-
-
    let mut response = String::new();
 
    stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
@@ -59,18 +56,13 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
 
    //i think i need to do this because mutable reference (?)
    let mut msg_response = String::new();
-   let send_msg = |cmd: &[u8], arguments: Option<object::Object>| -> Option<JsonValue> {
-       //maybe this optional is unnecesary
-       let msg = match arguments {
-           Some(arguments) => object!{
+   let mut send_msg = |cmd: &[u8], arguments: JsonValue| -> Option<JsonValue> {
+        assert!(arguments.is_object());
+       let msg = object!{
                 "execute": cmd,
                 "arguments": arguments 
-                },
-            None => object!{
-                "execute": cmd,
-                "arguments": {}
-            }
-       };
+        };
+       
         stream.write_all(jzon::stringify(msg).as_bytes());
         stream.write_all(b"\n");
 
@@ -80,31 +72,33 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
         return jzon::parse(&msg_response).ok();
    };
 
+   send_msg("qmp_capabilities".as_bytes(), object! {});
    println!("INFO: Sent qmp_capabilities message");
-   let mut iterator = 0;
-   loop {
-        response.clear();
-        iterator += 1;
-        reader.read_line(&mut response);
-        println!("QMP #{iterator} <- {}", &response);
-        let cmd = jzon::parse(response.trim()).map_err(|_|std::io::ErrorKind::Other)?;
-        if cmd["event"] == "POWERDOWN" {
-            println!("INFO: POWERDOWN event received. Shutting down");
-            return Ok(());
-        }
-
-        if iterator == 1 {
-            stream.write_all(br#""#);
-            stream.write_all(b"\n");
-        }
-
-   }
+   
+   Ok(())
 }
 
-fn create_qmp_event_listener(reader: BufReader<UnixStream>) -> std::io::Result<()> {
-    let new_reader = (*reader); 
+fn create_qmp_event_listener(cloned_stream: UnixStream) {
+    thread::spawn(move || -> std::io::Result<()>{
+        let mut reader = BufReader::new(cloned_stream.try_clone()?);
+        let mut res = String::new();
+        loop {
+            res.clear();
+            reader.read_line(&mut res)?;
+            println!("QMP (e) <- {}", &res);
+            let msg = jzon::parse(res.trim()).unwrap_or_else(|e| {
+                println!("ERROR: malformed event received, aborting");
+                std::process::exit(1)
+            });
+            if msg["event"] == "POWERDOWN" {
+                println!("INFO: POWERDOWN event received. Shutting down");
+                return Ok(());           
+            }
+        }
 
-    Ok(())
+        Ok(())
+    }); 
+
 }
 
 fn create_tos_disk(path: &Path) {
