@@ -4,6 +4,8 @@ use std::process::{Command, Stdio};
 use std::{time, thread};
 use std::os::unix::net::UnixStream;
 use std::io::{Write, Read, BufRead, BufReader};
+use std::collections::HashMap;
+use jzon::{object, JsonValue};
 
 //TODO support a custom assets dir via a flag
 const TOS_DISK_PATH: &str = "./assets/templeOS-disk.qcow2";
@@ -55,6 +57,29 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
    stream.write_all(b"\n");
 
+   //i think i need to do this because mutable reference (?)
+   let mut msg_response = String::new();
+   let send_msg = |cmd: &[u8], arguments: Option<object::Object>| -> Option<JsonValue> {
+       //maybe this optional is unnecesary
+       let msg = match arguments {
+           Some(arguments) => object!{
+                "execute": cmd,
+                "arguments": arguments 
+                },
+            None => object!{
+                "execute": cmd,
+                "arguments": {}
+            }
+       };
+        stream.write_all(jzon::stringify(msg).as_bytes());
+        stream.write_all(b"\n");
+
+        reader.read_line(&mut response);
+        msg_response.clear();
+        reader.read_line(&mut msg_response);
+        return jzon::parse(&msg_response).ok();
+   };
+
    println!("INFO: Sent qmp_capabilities message");
    let mut iterator = 0;
    loop {
@@ -63,13 +88,23 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
         reader.read_line(&mut response);
         println!("QMP #{iterator} <- {}", &response);
         let cmd = jzon::parse(response.trim()).map_err(|_|std::io::ErrorKind::Other)?;
-       
         if cmd["event"] == "POWERDOWN" {
             println!("INFO: POWERDOWN event received. Shutting down");
             return Ok(());
         }
 
+        if iterator == 1 {
+            stream.write_all(br#""#);
+            stream.write_all(b"\n");
+        }
+
    }
+}
+
+fn create_qmp_event_listener(reader: BufReader<UnixStream>) -> std::io::Result<()> {
+    let new_reader = (*reader); 
+
+    Ok(())
 }
 
 fn create_tos_disk(path: &Path) {
