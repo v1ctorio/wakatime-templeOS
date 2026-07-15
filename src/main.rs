@@ -54,31 +54,38 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
    stream.write_all(b"\n");
 
-   //i think i need to do this because mutable reference (?)
+   //I think I need to do this because mutable reference (?)
    let mut msg_response = String::new();
-   let mut send_msg = |cmd: &[u8], arguments: JsonValue| -> Option<JsonValue> {
+   let mut send_msg = |cmd: &str, arguments: JsonValue| -> Option<JsonValue> {
         assert!(arguments.is_object());
        let msg = object!{
                 "execute": cmd,
                 "arguments": arguments 
         };
        
-        stream.write_all(jzon::stringify(msg).as_bytes());
-        stream.write_all(b"\n");
+        stream.write_all(jzon::stringify(msg).as_bytes()).ok()?;
+        stream.write_all(b"\n").ok()?;
 
-        reader.read_line(&mut response);
+        reader.read_line(&mut response).ok()?;
         msg_response.clear();
-        reader.read_line(&mut msg_response);
+        reader.read_line(&mut msg_response).ok()?;
         return jzon::parse(&msg_response).ok();
    };
 
-   send_msg("qmp_capabilities".as_bytes(), object! {});
+   send_msg("qmp_capabilities", object! {});
    println!("INFO: Sent qmp_capabilities message");
+
+   // si llamo a create_qmp_event_listener aqui, 
+   // podria dar lugar a una race condition
+   loop {
+    
+   }
    
    Ok(())
 }
 
 fn create_qmp_event_listener(cloned_stream: UnixStream) {
+    todo!("I probably should stop worrying about async events and just work on the main functionality");
     thread::spawn(move || -> std::io::Result<()>{
         let mut reader = BufReader::new(cloned_stream.try_clone()?);
         let mut res = String::new();
@@ -86,7 +93,7 @@ fn create_qmp_event_listener(cloned_stream: UnixStream) {
             res.clear();
             reader.read_line(&mut res)?;
             println!("QMP (e) <- {}", &res);
-            let msg = jzon::parse(res.trim()).unwrap_or_else(|e| {
+            let msg = jzon::parse(res.trim()).unwrap_or_else(|_| {
                 println!("ERROR: malformed event received, aborting");
                 std::process::exit(1)
             });
