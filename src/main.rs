@@ -1,3 +1,5 @@
+mod memory;
+
 use std::fs;
 use std::path::{self, Path};
 use std::process::{Command, Stdio};
