@@ -47,8 +47,8 @@ fn main() {
     std::process::exit(0);
 }
 
-fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
-   let mut stream = UnixStream::connect(sockPath)?; 
+fn connect_qmp(sock_path: &Path) -> std::io::Result<()> {
+   let mut stream = UnixStream::connect(sock_path)?; 
    println!("INFO: Connected with the QEMU stream");
 
    let mut reader = BufReader::new(stream.try_clone()?);
@@ -81,14 +81,14 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    loop {
 
        //TODO common prfix for files
-       let filePath = format!("./assets/TempleOS-memdump-{}.bin", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
-       let filePath = path::absolute(filePath).unwrap();
+       let file_path = format!("./assets/TempleOS-memdump-{}.bin", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
+       let file_path = path::absolute(file_path).unwrap();
        send_msg("dump-guest-memory", 
            object! { 
-               "protocol": format!("fd:{}", filePath.to_str().unwrap()) 
+               "protocol": format!("fd:{}", file_path.to_str().unwrap()) 
            }
            );
-       dumps.push(filePath);
+       dumps.push(file_path);
        dbg!(&dumps);
        
        thread::sleep(Duration::from_secs(10));
@@ -148,7 +148,7 @@ fn start_tos_installation(disk_path: &Path) -> std::process::Child {
     let tos_image_local = tos_image_local.to_str().unwrap();
     let disk_path = disk_path.to_str().unwrap();
  
-    let mut tos = Command::new("qemu-system-x86_64")
+    let tos = Command::new("qemu-system-x86_64")
                     .args(["-m","512"])
                     .args(["-hda",disk_path])
                     .args(["-cdrom",tos_image_local])
