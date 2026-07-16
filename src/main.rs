@@ -1,6 +1,7 @@
 mod memory;
 mod installation_utils;
 
+use std::collections::VecDeque;
 use std::fs;
 use std::path::{self, Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -76,7 +77,7 @@ fn connect_qmp(sock_path: &Path) -> std::io::Result<()> {
    println!("INFO: Sending qmp_capabilities hello");
    send_msg("qmp_capabilities", object! {});
 
-   let mut dumps: Vec<PathBuf> = vec![];
+   let mut dumps: VecDeque<PathBuf> = VecDeque::new();
    // Main program loop !!!
    loop {
 
@@ -85,15 +86,27 @@ fn connect_qmp(sock_path: &Path) -> std::io::Result<()> {
        let file_path = path::absolute(file_path).unwrap();
        send_msg("dump-guest-memory", 
            object! { 
-               "protocol": format!("fd:{}", file_path.to_str().unwrap()) 
+               "protocol": format!("file:{}", file_path.to_str().unwrap()),
+               "paging": false
            }
            );
-       dumps.push(file_path);
+       dumps.push_back(file_path);
        dbg!(&dumps);
        
+       memory_dumps_garbage_collector(&mut dumps)?;
        thread::sleep(Duration::from_secs(10));
    }
    
+}
+
+const DUMPS_TO_KEEP: usize = 3;
+fn memory_dumps_garbage_collector(dumps: &mut VecDeque<PathBuf>) -> std::io::Result<()> {
+    while dumps.len() > DUMPS_TO_KEEP {
+        let dump_to_delete = dumps.pop_front().expect("dump.len > DUMPS_TO_KEEP => dumps.len > 0; shouldn't be empty");
+        fs::remove_file(dump_to_delete)?;
+    }
+    //TODO make it clean itself up and not leave memdumps after exiting
+    Ok(())
 }
 
 fn create_qmp_event_listener(cloned_stream: UnixStream) {

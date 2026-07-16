@@ -1,5 +1,5 @@
 // 446F635301000000FFFFFFFFFFFFFF7F
-const DocS_MAGIC_N: [u8; 16] = 
+const DOC_ED_MAGIC_N: [u8; 16] = 
                      [0x44, 0x6F, 0x63, 0x53, // 'DocS'
                       0x01, 0x00, 0x00, 0x00,
                       0xFF, 0xFF, 0xFF, 0xFF,
