@@ -3,10 +3,10 @@ mod memory;
 use std::fs;
 use std::path::{self, Path};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 use std::{time, thread};
 use std::os::unix::net::UnixStream;
 use std::io::{Write, Read, BufRead, BufReader};
-use std::collections::HashMap;
 use jzon::{object, JsonValue};
 
 //TODO support a custom assets dir via a flag
@@ -51,7 +51,6 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    println!("INFO: Connected with the QEMU stream");
 
    let mut reader = BufReader::new(stream.try_clone()?);
-   let mut response = String::new();
 
    stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
    stream.write_all(b"\n");
@@ -60,27 +59,29 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    let mut msg_response = String::new();
    let mut send_msg = |cmd: &str, arguments: JsonValue| -> Option<JsonValue> {
         assert!(arguments.is_object());
-       let msg = object!{
-                "execute": cmd,
-                "arguments": arguments 
+        let msg = object!{
+            "execute": cmd,
+            "arguments": arguments 
         };
-       
+        let msg = jzon::stringify(msg);
+
+        println!("QMP -> {}", &msg);
         stream.write_all(jzon::stringify(msg).as_bytes()).ok()?;
         stream.write_all(b"\n").ok()?;
 
-        reader.read_line(&mut response).ok()?;
         msg_response.clear();
         reader.read_line(&mut msg_response).ok()?;
+        println!("QMP <- {}", &msg_response);
         return jzon::parse(&msg_response).ok();
    };
 
    send_msg("qmp_capabilities", object! {});
    println!("INFO: Sent qmp_capabilities message");
 
-   // si llamo a create_qmp_event_listener aqui, 
-   // podria dar lugar a una race condition
    loop {
-    
+        println!("INFO: ");
+       send_msg("query_version", object!{});
+       thread::sleep(Duration::from_secs(10));
    }
    
    Ok(())
@@ -140,6 +141,7 @@ fn start_tos(disk_path: &Path, qmp_sock_path: &Path) -> std::process::Child {
     let tos = Command::new("qemu-system-x86_64")
                     .args(["-m", "512"])
                     .args(["-hda", disk_path])
+                    .args(["-display","sdl"])
                     .arg("-qmp").arg(format!("unix:{},server=on,wait=off", qmp_sock_path))
                     .spawn()
                     .unwrap();
