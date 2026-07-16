@@ -58,14 +58,11 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
 
    //I think I need to do this because mutable reference (?)
    let mut msg_response = String::new();
-   let mut send_msg = |cmd: &str, arguments: Option<JsonValue>| -> Option<JsonValue> {
-        let msg = match arguments {
-            Some(arguments) => object!{
-                "execute": cmd,
-                "arguments": arguments 
-                },
-            None => object!{ "execute": cmd }
-        };
+   let mut send_msg = |cmd: &str, arguments: JsonValue| -> Option<JsonValue> {
+        let msg = object!{
+                    "execute": cmd,
+                    "arguments": arguments 
+                  };
         let msg = jzon::stringify(msg);
 
         println!("QMP -> {}", &msg);
@@ -78,12 +75,11 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
         return jzon::parse(&msg_response).ok();
    };
 
-   send_msg("qmp_capabilities", Some(object! {}));
-   println!("INFO: Sent qmp_capabilities message");
+   println!("INFO: Sending qmp_capabilities hello");
+   send_msg("qmp_capabilities", object! {});
 
    loop {
-        println!("INFO: ");
-       send_msg("query_version", None);
+       send_msg("query-version", object! {});
        thread::sleep(Duration::from_secs(10));
    }
    
