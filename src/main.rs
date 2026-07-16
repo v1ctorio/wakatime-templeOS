@@ -1,4 +1,5 @@
 mod memory;
+mod installation_utils;
 
 use std::fs;
 use std::path::{self, Path};
@@ -10,10 +11,10 @@ use std::io::{Write, Read, BufRead, BufReader};
 use jzon::{object, JsonValue};
 
 //TODO support a custom assets dir via a flag
-const TOS_DISK_PATH: &str = "./assets/templeOS-disk.qcow2";
-const TOS_IMAGE_LOCAL_PATH: &str = "./assets/TempleOS.ISO";
-const TOS_IMAGE_REMOTE_PATH: &str = "https://templeos.org/Downloads/TempleOS.ISO";
-const QMP_SOCKET_PATH: &str = "./assets/qmp_socket.sock"; 
+pub const TOS_DISK_PATH: &str = "./assets/templeOS-disk.qcow2";
+pub const TOS_IMAGE_LOCAL_PATH: &str = "./assets/TempleOS.ISO";
+pub const TOS_IMAGE_REMOTE_PATH: &str = "https://templeos.org/Downloads/TempleOS.ISO";
+pub const QMP_SOCKET_PATH: &str = "./assets/qmp_socket.sock"; 
 
 fn main() {
     let tos_disk = Path::new(TOS_DISK_PATH);
@@ -24,7 +25,7 @@ fn main() {
     check_dependencies();
 
     if !tos_disk.exists() {
-        create_tos_disk(&tos_disk);
+        installation_utils::create_tos_disk(&tos_disk);
     }
 
     let is_tos_installed = true; //TODO check this on runtime. maybe a assets/.tos_installed file?
@@ -84,7 +85,6 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
        thread::sleep(Duration::from_secs(10));
    }
    
-   Ok(())
 }
 
 fn create_qmp_event_listener(cloned_stream: UnixStream) {
@@ -111,29 +111,6 @@ fn create_qmp_event_listener(cloned_stream: UnixStream) {
 
 }
 
-fn create_tos_disk(path: &Path) {
-    let disk_size = "2G";
-
-    let path = path.to_str().unwrap();
-    println!("INFO: Storage disk not found in {TOS_DISK_PATH}, attempting to create a 2G one via `qemu-img`\n");
-    let status = Command::new("qemu-img")
-                    .arg("create")
-                    .args(["-f", "qcow2"])
-                    .arg(path)
-                    .arg(disk_size)
-                    .status()
-                    .unwrap();
-
-    println!();
-    match status.success() {
-        true => println!("INFO: Successfully created the disk"),
-        false => {
-                println!("ERROR: failed to create disk. aborting");
-                std::process::exit(1);
-        }
-    }
-}
-
 fn start_tos(disk_path: &Path, qmp_sock_path: &Path) -> std::process::Child {
     let disk_path = disk_path.to_str().unwrap();
     let qmp_sock_path = qmp_sock_path.to_str().unwrap();
@@ -155,7 +132,7 @@ fn start_tos_installation(disk_path: &Path) -> std::process::Child {
     let tos_image_local = Path::new(TOS_IMAGE_LOCAL_PATH);
     let tos_image_local = path::absolute(tos_image_local).unwrap();
     if !tos_image_local.exists() {
-        download_tos_image(&tos_image_local);
+        installation_utils::download_tos_image(&tos_image_local);
     }
 
     let tos_image_local = tos_image_local.to_str().unwrap();
@@ -173,23 +150,6 @@ fn start_tos_installation(disk_path: &Path) -> std::process::Child {
              // how to handle installation later
     //return tos
 }
-
-fn download_tos_image(path: &Path) {
-    let path = path.to_str().unwrap();
-    println!("INFO: TempleOS ISO not found in {TOS_IMAGE_LOCAL_PATH}, attempting to download from {TOS_IMAGE_REMOTE_PATH}");
-    let res = Command::new("wget")
-        .arg(TOS_IMAGE_REMOTE_PATH)
-        .args(["-o", path])
-        .status()
-        .unwrap();
-    if !res.success() {
-        println!("ERROR: failed to download the TempleOS image");
-        std::process::exit(1);
-    } else {
-        println!("INFO: successfully downloaded the TempleOS image")
-    }
-}
-
 const REQUIRED_CMDS: &[&str] = &["qemu-system-x86_64", "qemu-img", "wget"];
 fn check_dependencies() {
     let mut not_ok_cmds: Vec<&str> = Vec::new();
