@@ -2,9 +2,9 @@ mod memory;
 mod installation_utils;
 
 use std::fs;
-use std::path::{self, Path};
+use std::path::{self, Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{time, thread};
 use std::os::unix::net::UnixStream;
 use std::io::{Write, Read, BufRead, BufReader};
@@ -42,7 +42,7 @@ fn main() {
 
     connect_qmp(&qmp_sock).unwrap();
     
-    tos.kill();
+    tos.kill().unwrap();
     println!("Hello, world!");
     std::process::exit(0);
 }
@@ -53,8 +53,6 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
 
    let mut reader = BufReader::new(stream.try_clone()?);
 
-   stream.write_all(br#"{ "execute": "qmp_capabilities" }"#)?;
-   stream.write_all(b"\n");
 
    //I think I need to do this because mutable reference (?)
    let mut msg_response = String::new();
@@ -78,8 +76,21 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
    println!("INFO: Sending qmp_capabilities hello");
    send_msg("qmp_capabilities", object! {});
 
+   let mut dumps: Vec<PathBuf> = vec![];
+   // Main program loop !!!
    loop {
-       send_msg("query-version", object! {});
+
+       //TODO common prfix for files
+       let filePath = format!("./assets/TempleOS-memdump-{}.bin", SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
+       let filePath = path::absolute(filePath).unwrap();
+       send_msg("dump-guest-memory", 
+           object! { 
+               "protocol": format!("fd:{}", filePath.to_str().unwrap()) 
+           }
+           );
+       dumps.push(filePath);
+       dbg!(&dumps);
+       
        thread::sleep(Duration::from_secs(10));
    }
    
@@ -117,6 +128,7 @@ fn start_tos(disk_path: &Path, qmp_sock_path: &Path) -> std::process::Child {
                     .args(["-m", "512"])
                     .args(["-hda", disk_path])
                     .args(["-display","sdl"])
+                    .arg("-enable-kvm")
                     .arg("-qmp").arg(format!("unix:{},server=on,wait=off", qmp_sock_path))
                     .spawn()
                     .unwrap();
