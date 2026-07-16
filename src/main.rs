@@ -58,16 +58,18 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
 
    //I think I need to do this because mutable reference (?)
    let mut msg_response = String::new();
-   let mut send_msg = |cmd: &str, arguments: JsonValue| -> Option<JsonValue> {
-        assert!(arguments.is_object());
-        let msg = object!{
-            "execute": cmd,
-            "arguments": arguments 
+   let mut send_msg = |cmd: &str, arguments: Option<JsonValue>| -> Option<JsonValue> {
+        let msg = match arguments {
+            Some(arguments) => object!{
+                "execute": cmd,
+                "arguments": arguments 
+                },
+            None => object!{ "execute": cmd }
         };
         let msg = jzon::stringify(msg);
 
         println!("QMP -> {}", &msg);
-        stream.write_all(jzon::stringify(msg).as_bytes()).ok()?;
+        stream.write_all(msg.as_bytes()).ok()?;
         stream.write_all(b"\n").ok()?;
 
         msg_response.clear();
@@ -76,12 +78,12 @@ fn connect_qmp(sockPath: &Path) -> std::io::Result<()> {
         return jzon::parse(&msg_response).ok();
    };
 
-   send_msg("qmp_capabilities", object! {});
+   send_msg("qmp_capabilities", Some(object! {}));
    println!("INFO: Sent qmp_capabilities message");
 
    loop {
         println!("INFO: ");
-       send_msg("query_version", object!{});
+       send_msg("query_version", None);
        thread::sleep(Duration::from_secs(10));
    }
    
